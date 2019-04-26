@@ -96,7 +96,7 @@ const char *fragmentSource = R"(
         float szamlalo = dot(oPlane.point-ray.start, oPlane.normal);
         hit.t = szamlalo/nevezo;
 		hit.position = ray.start + ray.dir * hit.t;
-        if(length(hit.position-oPlane.point) > 5){
+        if(hit.position.z - oPlane.point.z > 7 || hit.position.z - oPlane.point.z < -7){
             hit.t = -1;
             return hit;
         }
@@ -272,7 +272,7 @@ struct Plane{
         point.SetUniform(shaderProg, buffer);
     }
     bool collide(Sphere s){
-        return dot(s.center-point, normal) <= 0 && dot(s.force, normal*-1) >0? true: false;
+        return dot(s.center-point, normal) <= s.radius && dot(s.force, normal*-1) >0? true: false;
     }
 
 };
