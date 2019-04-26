@@ -5,7 +5,7 @@
 
 // vertex shader in GLSL
 const char *vertexSource = R"(
-	#version 450
+	#version 330
     precision highp float;
 
 	uniform vec3 wLookAt, wRight, wUp;          // pos of eye
@@ -20,7 +20,7 @@ const char *vertexSource = R"(
 )";
 // fragment shader in GLSL
 const char *fragmentSource = R"(
-	#version 450
+	#version 330
     precision highp float;
 
 	struct Material {
@@ -93,7 +93,7 @@ const char *fragmentSource = R"(
         float szamlalo = dot(oPlane.point-ray.start, oPlane.normal);
         hit.t = szamlalo/nevezo;
 		hit.position = ray.start + ray.dir * hit.t;
-        if(length(hit.position-oPlane.point) > 3){
+        if(length(hit.position-oPlane.point) > 5){
             hit.t = -1;
             return hit;
         }
