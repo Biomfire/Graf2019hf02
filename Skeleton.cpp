@@ -26,7 +26,7 @@ const char *fragmentSource = R"(
 	struct Material {
 		vec3 ka, kd, ks;
 		float  shininess;
-		vec3 F0;
+		vec3 k,v;
 		int rough, reflective;
 	};
 
@@ -58,11 +58,12 @@ const char *fragmentSource = R"(
 	const int nMaxObjects = 100;
 	uniform vec3 wEye;
 	uniform Light light;
-	uniform Material materials[2];  // diffuse, specular, ambient ref
+	uniform Material materials[5];  // diffuse, specular, ambient ref
 	uniform int nObjects;
     uniform int nPlanes;
 	uniform Sphere objects[nMaxObjects];
     uniform Plane planes[nMaxObjects];
+    uniform bool isGold;
 
 	in  vec3 p;					// point on camera window corresponding to the pixel
 	out vec4 fragmentColor;		// output that goes to the raster memory as told by glBindFragDataLocation
@@ -106,12 +107,12 @@ const char *fragmentSource = R"(
 		bestHit.t = -1;
 		for (int o = 0; o < nObjects; o++) {
 			Hit hit = intersect(objects[o], ray); //  hit.t < 0 if no intersection
-            hit.mat = 0;	 // half of the objects are rough
+            hit.mat = o%3;	 // half of the objects are rough
 			if (hit.t > 0 && (bestHit.t < 0 || hit.t < bestHit.t))  bestHit = hit;
 		}
         for (int o = 0; o < nPlanes; o++) {
 			Hit hit = intersect(planes[o], ray); //  hit.t < 0 if no intersection
-            hit.mat = 1;     // half of the objects are reflective
+            hit.mat = isGold? 3:4;     // half of the objects are reflective
 			if (hit.t > 0 && (bestHit.t < 0 || hit.t < bestHit.t))  bestHit = hit;
 		}
 		if (dot(ray.dir, bestHit.normal) > 0) bestHit.normal = bestHit.normal * (-1);
@@ -124,8 +125,12 @@ const char *fragmentSource = R"(
 		return false;
 	}
 
-	vec3 Fresnel(vec3 F0, float cosTheta) {
-		return F0 + (vec3(1, 1, 1) - F0) * pow(cosTheta, 5);
+	vec3 Fresnel(vec3 v, vec3 k, float cosTheta) {
+        vec3 returnvec;
+        returnvec.x = ((pow((v.x -1.0), 2)) + (pow(k.x, 2)) + (pow((1.0 -cosTheta), 5)) * (4 * v.x)) / ((pow((v.x + 1.0), 2)) + (pow(k.x, 2)));
+        returnvec.y = ((pow((v.y -1.0), 2)) + (pow(k.y, 2)) + (pow((1.0 -cosTheta), 5)) * (4 * v.y)) / ((pow((v.y + 1.0), 2)) + (pow(k.y, 2)));
+        returnvec.z = ((pow((v.z -1.0), 2)) + (pow(k.z, 2)) + (pow((1.0 -cosTheta), 5)) * (4 * v.z)) / ((pow((v.z + 1.0), 2)) + (pow(k.z, 2)));
+        return returnvec;
 	}
 
 	const float epsilon = 0.0001f;
@@ -152,7 +157,7 @@ const char *fragmentSource = R"(
 			}
 
 			if (materials[hit.mat].reflective == 1) {
-				weight *= Fresnel(materials[hit.mat].F0, dot(-ray.dir, hit.normal));
+				weight *= Fresnel(materials[hit.mat].v, materials[hit.mat].k, dot(-ray.dir, hit.normal));
 				ray.start = hit.position + hit.normal * epsilon;
 				ray.dir = reflect(ray.dir, hit.normal);
 			} else return outRadiance;
@@ -171,7 +176,7 @@ class Material {
 protected:
     vec3 ka, kd, ks;
     float  shininess;
-    vec3 F0;
+    vec3 k,v;
     bool rough, reflective;
 public:
     Material RoughMaterial(vec3 _kd, vec3 _ks, float _shininess) {
@@ -181,11 +186,6 @@ public:
         shininess = _shininess;
         rough = true;
         reflective = false;
-    }
-    Material SmoothMaterial(vec3 _F0) {
-        F0 = _F0;
-        rough = false;
-        reflective = true;
     }
     void SetUniform(unsigned int shaderProg, int mat) {
         char buffer[256];
@@ -198,8 +198,10 @@ public:
         sprintf(buffer, "materials[%d].shininess", mat);
         int location = glGetUniformLocation(shaderProg, buffer);
         if (location >= 0) glUniform1f(location, shininess); else printf("uniform material.shininess cannot be set\n");
-        sprintf(buffer, "materials[%d].F0", mat);
-        F0.SetUniform(shaderProg, buffer);
+        sprintf(buffer, "materials[%d].k", mat);
+        k.SetUniform(shaderProg, buffer);
+        sprintf(buffer, "materials[%d].v", mat);
+        v.SetUniform(shaderProg, buffer);
 
         sprintf(buffer, "materials[%d].rough", mat);
         location = glGetUniformLocation(shaderProg, buffer);
@@ -224,14 +226,16 @@ public:
 
 class SmoothMaterial : public Material {
 public:
-    SmoothMaterial(vec3 _F0) {
-        F0 = _F0;
+    SmoothMaterial(vec3 _v, vec3 _k) {
+        v = _v;
+        k = _k;
         rough = false;
         reflective = true;
     }
 };
 
 struct Sphere {
+    vec3 force = vec3(0.1,0.1,0);
     vec3 center;
     float radius;
 
@@ -243,6 +247,9 @@ struct Sphere {
         sprintf(buffer, "objects[%d].radius", o);
         int location = glGetUniformLocation(shaderProg, buffer);
         if (location >= 0) glUniform1f(location, radius); else printf("uniform %s cannot be set\n", buffer);
+    }
+    void animate(int time){
+
     }
 };
 struct Plane{
@@ -312,9 +319,11 @@ public:
 
         lights.push_back(new Light(vec3(0, 0, 4), vec3(3, 3, 3), vec3(0.4, 0.3, 0.3)));
 
-        vec3 kd(0.3f, 0.2f, 0.1f), ks(10, 10, 10);
+        vec3 kd(0.3f, 0.2f, 0.1f), ks(1, 0, 0);
         //objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5), rnd()*0.1 ));
         objects.push_back(new Sphere(vec3(0, 0, -10), 0.2 ));
+        objects.push_back(new Sphere(vec3(0, -0.5, -10), 0.2 ));
+        objects.push_back(new Sphere(vec3(0, 0.5, -10), 0.2 ));
         //planes.push_back(new Plane(vec3(0,1,0), vec3(0,-1,-3)));
         //planes.push_back(new Plane(vec3(0,-1,0), vec3(0,1,-3)));
        // planes.push_back(new Plane(vec3(-1,0,0), vec3(1,0,-3)));
@@ -331,8 +340,11 @@ public:
         }
 
 
-        materials.push_back(new RoughMaterial(kd, ks, 50));
-        materials.push_back(new SmoothMaterial(vec3(0.9, 0.85, 0.8)));
+        materials.push_back(new RoughMaterial(vec3(1,0,0), vec3(0,1,0), 50));
+        materials.push_back(new RoughMaterial(vec3(0,1,0) , vec3(0,0,1), 40));
+        materials.push_back(new RoughMaterial(vec3(0,0,1), vec3(1,0,0), 70));
+        materials.push_back(new SmoothMaterial(vec3(0.17, 0.35, 1.5),vec3(3.1,2.7,1.9)));
+        materials.push_back(new SmoothMaterial(vec3(0.14, 0.16, 0.13), vec3(4.1,2.3,3.1)));
     }
     void SetUniform(unsigned int shaderProg) {
         {
@@ -405,6 +417,8 @@ void onInitialization() {
     // create program for the GPU
     gpuProgram.Create(vertexSource, fragmentSource, "fragmentColor");
     gpuProgram.Use();
+    int location = glGetUniformLocation(gpuProgram.getId(), "isGold");
+    if (location >= 0) glUniform1i(location, TRUE); else printf("uniform isGold cannot be set\n");
 }
 
 // Window has become invalid: Redraw
@@ -428,9 +442,16 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 
 // Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) {
+    int location = glGetUniformLocation(gpuProgram.getId(), "isGold");
     switch(key){
         case 'a':
             scene.increaseMirrorNumber();
+            break;
+        case  'g':
+            if (location >= 0) glUniform1i(location, TRUE); else printf("uniform isGold cannot be set\n");
+            break;
+        case 's':
+            if (location >= 0) glUniform1i(location, FALSE); else printf("uniform isGold cannot be set\n");
             break;
         default:
             break;
