@@ -270,7 +270,7 @@ struct Plane{
         point.SetUniform(shaderProg, buffer);
     }
     bool collide(Sphere s){
-        return dot(s.center-point, normal) <= 0? true: false;
+        return dot(s.center-point, normal) <= 0 && dot(s.force, normal*-1) >0? true: false;
     }
 
 };
@@ -446,7 +446,7 @@ void onInitialization() {
     gpuProgram.Create(vertexSource, fragmentSource, "fragmentColor");
     gpuProgram.Use();
     int location = glGetUniformLocation(gpuProgram.getId(), "isGold");
-    if (location >= 0) glUniform1i(location, TRUE); else printf("uniform isGold cannot be set\n");
+    if (location >= 0) glUniform1i(location, true); else printf("uniform isGold cannot be set\n");
 }
 
 // Window has become invalid: Redraw
@@ -476,10 +476,10 @@ void onKeyboardUp(unsigned char key, int pX, int pY) {
             scene.increaseMirrorNumber();
             break;
         case  'g':
-            if (location >= 0) glUniform1i(location, TRUE); else printf("uniform isGold cannot be set\n");
+            if (location >= 0) glUniform1i(location, true); else printf("uniform isGold cannot be set\n");
             break;
         case 's':
-            if (location >= 0) glUniform1i(location, FALSE); else printf("uniform isGold cannot be set\n");
+            if (location >= 0) glUniform1i(location, false); else printf("uniform isGold cannot be set\n");
             break;
         default:
             break;
