@@ -19,6 +19,8 @@ const char *vertexSource = R"(
 	}
 )";
 // fragment shader in GLSL
+//Frenel sünis könyv 120. o
+//Vik wiki-s helper doksi
 const char *fragmentSource = R"(
 	#version 330
     precision highp float;
@@ -134,7 +136,7 @@ const char *fragmentSource = R"(
 	}
 
 	const float epsilon = 0.0001f;
-	const int maxdepth = 5;
+	const int maxdepth = 10;
 
 	vec3 trace(Ray ray) {
 		vec3 weight = vec3(1, 1, 1);
@@ -249,7 +251,7 @@ struct Sphere {
         if (location >= 0) glUniform1f(location, radius); else printf("uniform %s cannot be set\n", buffer);
     }
     bool collide(Sphere s){
-        return length(center-s.center) <= (radius+s.radius)? true: false;
+        return length(center-s.center) <= (radius+s.radius) && dot(center-s.center,force ) < 0? true: false;
     }
     vec3 getNormal(Sphere s){
         return normalize(s.center-center);
@@ -326,13 +328,16 @@ public:
         float fov = 45 * M_PI / 180;
         camera.set(eye, lookat, vup, fov);
 
-        lights.push_back(new Light(vec3(0, 0, 4), vec3(3, 3, 3), vec3(0.4, 0.3, 0.3)));
+        lights.push_back(new Light(vec3(0, 0, 4), vec3(1,1, 1), vec3(1,1, 1)));
 
         vec3 kd(0.3f, 0.2f, 0.1f), ks(1, 0, 0);
-        //objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5), rnd()*0.1 ));
+
         objects.push_back(new Sphere(vec3(0, 0, -10), 0.2 ));
         objects.push_back(new Sphere(vec3(0, -0.5, -10), 0.2 ));
         objects.push_back(new Sphere(vec3(0, 0.5, -10), 0.2 ));
+        objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, -10), 0.2  ));
+        objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, -10), 0.2  ));
+        objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, -10), 0.2  ));
         //planes.push_back(new Plane(vec3(0,1,0), vec3(0,-1,-3)));
         //planes.push_back(new Plane(vec3(0,-1,0), vec3(0,1,-3)));
        // planes.push_back(new Plane(vec3(-1,0,0), vec3(1,0,-3)));
@@ -349,9 +354,9 @@ public:
         }
 
 
-        materials.push_back(new RoughMaterial(vec3(1,0,0), vec3(0,1,0), 50));
-        materials.push_back(new RoughMaterial(vec3(0,1,0) , vec3(0,0,1), 40));
-        materials.push_back(new RoughMaterial(vec3(0,0,1), vec3(1,0,0), 70));
+        materials.push_back(new RoughMaterial(vec3(1,0,0), vec3(10,10,1), 50));
+        materials.push_back(new RoughMaterial(vec3(0,1,0) , vec3(1.5,2,1), 1));
+        materials.push_back(new RoughMaterial(vec3(0,0,1), vec3(1,6,2), 70));
         materials.push_back(new SmoothMaterial(vec3(0.17, 0.35, 1.5),vec3(3.1,2.7,1.9)));
         materials.push_back(new SmoothMaterial(vec3(0.14, 0.16, 0.13), vec3(4.1,2.3,3.1)));
     }
