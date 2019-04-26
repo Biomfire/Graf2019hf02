@@ -171,7 +171,7 @@ const char *fragmentSource = R"(
 		fragmentColor = vec4(trace(ray), 1);
 	}
 )";
-
+float rnd() { return (float)rand() / RAND_MAX; };
 class Material {
 protected:
     vec3 ka, kd, ks;
@@ -235,11 +235,11 @@ public:
 };
 
 struct Sphere {
-    vec3 force = vec3(0.1,0.1,0);
+    vec3 force;
     vec3 center;
     float radius;
 
-    Sphere(const vec3& _center, float _radius) { center = _center; radius = _radius; }
+    Sphere(const vec3& _center, float _radius) { center = _center; radius = _radius; force = vec3(rnd()*0.001, rnd()*0.001, 0);}
     void SetUniform(unsigned int shaderProg, int o) {
         char buffer[256];
         sprintf(buffer, "objects[%d].center", o);
@@ -248,8 +248,14 @@ struct Sphere {
         int location = glGetUniformLocation(shaderProg, buffer);
         if (location >= 0) glUniform1f(location, radius); else printf("uniform %s cannot be set\n", buffer);
     }
+    bool collide(Sphere s){
+        return length(center-s.center) <= (radius+s.radius)? true: false;
+    }
+    vec3 getNormal(Sphere s){
+        return normalize(s.center-center);
+    }
     void animate(int time){
-
+        center = center+ force*time;
     }
 };
 struct Plane{
@@ -262,6 +268,9 @@ struct Plane{
         normal.SetUniform(shaderProg, buffer);
         sprintf(buffer, "planes[%d].point", o);
         point.SetUniform(shaderProg, buffer);
+    }
+    bool collide(Sphere s){
+        return dot(s.center-point, normal) <= 0? true: false;
     }
 
 };
@@ -300,7 +309,7 @@ struct Light {
     }
 };
 
-float rnd() { return (float)rand() / RAND_MAX; }
+
 
 class Scene {
     int numberOfMirrors = 3;
@@ -376,7 +385,26 @@ public:
             currentAngle += centralAngle;
         }
     }
-    void Animate(float dt) { /*camera.Animate(dt);*/ }
+    void Animate(float dt) {
+        for(int i = 0; i< objects.size(); i++){
+            objects[i]->animate(dt);
+            for(int j = 0; j< objects.size(); j++) {
+                if(objects[i]->collide(*objects[j]) && i!=j){
+                    vec3 n = objects[j]->getNormal(*objects[i]);
+                    vec3& force = objects[i]->force;
+                    force = force-n*2*dot(force,n);
+                }
+            }
+            for(int j = 0; j< planes.size(); j++) {
+                if(planes[j]->collide(*objects[i]))
+                {
+                    vec3& force = objects[i]->force;
+                    force = force-planes[j]->normal*2*dot(force,planes[j]->normal);
+                }
+            }
+
+        }
+    }
 };
 
 GPUProgram gpuProgram; // vertex and fragment shaders
@@ -407,7 +435,7 @@ public:
 };
 
 FullScreenTexturedQuad fullScreenTexturedQuad;
-
+int lasttime;
 // Initialization, create an OpenGL context
 void onInitialization() {
     glViewport(0, 0, windowWidth, windowHeight);
@@ -469,6 +497,8 @@ void onMouseMotion(int pX, int pY) {
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
-    scene.Animate(0.01);
+    int deltaTime =glutGet(GLUT_ELAPSED_TIME)-lasttime;
+    lasttime = glutGet(GLUT_ELAPSED_TIME);
+    scene.Animate(deltaTime);
     glutPostRedisplay();
 }
