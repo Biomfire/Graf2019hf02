@@ -296,6 +296,7 @@ struct Light {
 float rnd() { return (float)rand() / RAND_MAX; }
 
 class Scene {
+    int numberOfMirrors = 3;
     std::vector<Sphere *> objects;
     std::vector<Plane *> planes;
     std::vector<Light *> lights;
@@ -314,10 +315,21 @@ public:
         vec3 kd(0.3f, 0.2f, 0.1f), ks(10, 10, 10);
         //objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5), rnd()*0.1 ));
         objects.push_back(new Sphere(vec3(0, 0, -10), 0.2 ));
-        planes.push_back(new Plane(vec3(0,1,0), vec3(0,-1,-3)));
-        planes.push_back(new Plane(vec3(0,1,0), vec3(0,1,-3)));
-        planes.push_back(new Plane(vec3(1,0,0), vec3(1,0,-3)));
-        planes.push_back(new Plane(vec3(1,0,0), vec3(-1,0,-3)));
+        //planes.push_back(new Plane(vec3(0,1,0), vec3(0,-1,-3)));
+        //planes.push_back(new Plane(vec3(0,-1,0), vec3(0,1,-3)));
+       // planes.push_back(new Plane(vec3(-1,0,0), vec3(1,0,-3)));
+        //planes.push_back(new Plane(vec3(1,0,0), vec3(-1,0,-3)));
+        numberOfMirrors = 3;
+        float centralAngle = 2*M_PI/numberOfMirrors;
+        float currentAngle = 0;
+        for(int i = 0; i < numberOfMirrors; i++){
+            vec2 position;
+            position.x = sin(currentAngle);
+            position.y = cos(currentAngle);
+            planes.push_back(new Plane(vec3(-position.x, -position.y, 0), vec3(position.x, position.y, -3)));
+            currentAngle += centralAngle;
+        }
+
 
         materials.push_back(new RoughMaterial(kd, ks, 50));
         materials.push_back(new SmoothMaterial(vec3(0.9, 0.85, 0.8)));
@@ -336,6 +348,21 @@ public:
         lights[0]->SetUniform(shaderProg);
         camera.SetUniform(shaderProg);
         for (int mat = 0; mat < materials.size(); mat++) materials[mat]->SetUniform(shaderProg, mat);
+    }
+    void increaseMirrorNumber(){
+        for(int i = 0; i < numberOfMirrors; i++){
+            planes.pop_back();
+        }
+        numberOfMirrors++;
+        float centralAngle = 2*M_PI/numberOfMirrors;
+        float currentAngle = 0;
+        for(int i = 0; i < numberOfMirrors; i++){
+            vec2 position;
+            position.x = sin(currentAngle);
+            position.y = cos(currentAngle);
+            planes.push_back(new Plane(vec3(-position.x, -position.y, 0), vec3(position.x, position.y, -3)));
+            currentAngle += centralAngle;
+        }
     }
     void Animate(float dt) { /*camera.Animate(dt);*/ }
 };
@@ -401,6 +428,13 @@ void onKeyboard(unsigned char key, int pX, int pY) {
 
 // Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) {
+    switch(key){
+        case 'a':
+            scene.increaseMirrorNumber();
+            break;
+        default:
+            break;
+    }
 
 }
 
