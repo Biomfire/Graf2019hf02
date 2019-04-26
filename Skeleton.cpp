@@ -50,13 +50,19 @@ const char *fragmentSource = R"(
 		vec3 start, dir;
 	};
 
-	const int nMaxObjects = 500;
+    struct Plane{
+        vec3 normal;
+        vec3 point;
+    };
 
+	const int nMaxObjects = 100;
 	uniform vec3 wEye;
 	uniform Light light;
 	uniform Material materials[2];  // diffuse, specular, ambient ref
 	uniform int nObjects;
+    uniform int nPlanes;
 	uniform Sphere objects[nMaxObjects];
+    uniform Plane planes[nMaxObjects];
 
 	in  vec3 p;					// point on camera window corresponding to the pixel
 	out vec4 fragmentColor;		// output that goes to the raster memory as told by glBindFragDataLocation
@@ -79,14 +85,33 @@ const char *fragmentSource = R"(
 		hit.normal = (hit.position - object.center) / object.radius;
 		return hit;
 	}
+    Hit intersect(const Plane oPlane, const Ray ray){
+        Hit hit;
+        hit.t = -1;
+        float nevezo = dot(ray.dir, oPlane.normal);
+        if( nevezo == 0) return hit;
+        float szamlalo = dot(oPlane.point-ray.start, oPlane.normal);
+        hit.t = szamlalo/nevezo;
+		hit.position = ray.start + ray.dir * hit.t;
+        if(length(hit.position-oPlane.point) > 3){
+            hit.t = -1;
+            return hit;
+        }
+        hit.normal = oPlane.normal;
+        return hit;
+    }
 
 	Hit firstIntersect(Ray ray) {
 		Hit bestHit;
 		bestHit.t = -1;
 		for (int o = 0; o < nObjects; o++) {
 			Hit hit = intersect(objects[o], ray); //  hit.t < 0 if no intersection
-			if (o < nObjects/2) hit.mat = 0;	 // half of the objects are rough
-			else			    hit.mat = 1;     // half of the objects are reflective
+            hit.mat = 0;	 // half of the objects are rough
+			if (hit.t > 0 && (bestHit.t < 0 || hit.t < bestHit.t))  bestHit = hit;
+		}
+        for (int o = 0; o < nPlanes; o++) {
+			Hit hit = intersect(planes[o], ray); //  hit.t < 0 if no intersection
+            hit.mat = 1;     // half of the objects are reflective
 			if (hit.t > 0 && (bestHit.t < 0 || hit.t < bestHit.t))  bestHit = hit;
 		}
 		if (dot(ray.dir, bestHit.normal) > 0) bestHit.normal = bestHit.normal * (-1);
@@ -94,7 +119,8 @@ const char *fragmentSource = R"(
 	}
 
 	bool shadowIntersect(Ray ray) {	// for directional lights
-		for (int o = 0; o < nObjects; o++) if (intersect(objects[o], ray).t > 0) return true; //  hit.t < 0 if no intersection
+		for (int o = 0; o < nObjects; o++) if (intersect(objects[o], ray).t > 0) return true;
+        for (int o = 0; o < nPlanes; o++) if (intersect(planes[o], ray).t > 0) return true;//  hit.t < 0 if no intersection
 		return false;
 	}
 
@@ -219,7 +245,19 @@ struct Sphere {
         if (location >= 0) glUniform1f(location, radius); else printf("uniform %s cannot be set\n", buffer);
     }
 };
+struct Plane{
+    vec3 normal;
+    vec3 point;
+    Plane(const vec3 & _normal, const vec3 & _point){normal = _normal; point = _point;}
+    void SetUniform(unsigned int shaderProg, int o) {
+        char buffer[256];
+        sprintf(buffer, "planes[%d].normal", o);
+        normal.SetUniform(shaderProg, buffer);
+        sprintf(buffer, "planes[%d].point", o);
+        point.SetUniform(shaderProg, buffer);
+    }
 
+};
 class Camera {
     vec3 eye, lookat, right, up;
     float fov;
@@ -259,6 +297,7 @@ float rnd() { return (float)rand() / RAND_MAX; }
 
 class Scene {
     std::vector<Sphere *> objects;
+    std::vector<Plane *> planes;
     std::vector<Light *> lights;
     Camera camera;
     std::vector<Material *> materials;
@@ -270,19 +309,30 @@ public:
         float fov = 45 * M_PI / 180;
         camera.set(eye, lookat, vup, fov);
 
-        lights.push_back(new Light(vec3(1, 1, 1), vec3(3, 3, 3), vec3(0.4, 0.3, 0.3)));
+        lights.push_back(new Light(vec3(0, 0, 4), vec3(3, 3, 3), vec3(0.4, 0.3, 0.3)));
 
         vec3 kd(0.3f, 0.2f, 0.1f), ks(10, 10, 10);
-        objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5), rnd()*0.1 ));
-        objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5), rnd()*0.1 ));
+        //objects.push_back(new Sphere(vec3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5), rnd()*0.1 ));
+        objects.push_back(new Sphere(vec3(0, 0, -10), 0.2 ));
+        planes.push_back(new Plane(vec3(0,1,0), vec3(0,-1,-3)));
+        planes.push_back(new Plane(vec3(0,1,0), vec3(0,1,-3)));
+        planes.push_back(new Plane(vec3(1,0,0), vec3(1,0,-3)));
+        planes.push_back(new Plane(vec3(1,0,0), vec3(-1,0,-3)));
 
         materials.push_back(new RoughMaterial(kd, ks, 50));
         materials.push_back(new SmoothMaterial(vec3(0.9, 0.85, 0.8)));
     }
     void SetUniform(unsigned int shaderProg) {
-        int location = glGetUniformLocation(shaderProg, "nObjects");
-        if (location >= 0) glUniform1i(location, objects.size()); else printf("uniform nObjects cannot be set\n");
+        {
+            int location = glGetUniformLocation(shaderProg, "nObjects");
+            if (location >= 0) glUniform1i(location, objects.size()); else printf("uniform nObjects cannot be set\n");
+        }
+        {
+            int location = glGetUniformLocation(shaderProg, "nPlanes");
+            if (location >= 0) glUniform1i(location, planes.size()); else printf("uniform nObjects cannot be set\n");
+        }
         for (int o = 0; o < objects.size(); o++) objects[o]->SetUniform(shaderProg, o);
+        for (int o = 0; o < planes.size(); o++) planes[o]->SetUniform(shaderProg, o);
         lights[0]->SetUniform(shaderProg);
         camera.SetUniform(shaderProg);
         for (int mat = 0; mat < materials.size(); mat++) materials[mat]->SetUniform(shaderProg, mat);
